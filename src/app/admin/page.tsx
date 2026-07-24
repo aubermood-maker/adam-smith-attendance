@@ -71,6 +71,7 @@ export default function AdminPage() {
         const excelRow = index + 2;
         const rawName = String(row[0] ?? "").trim();
         const rawPhone = String(row[1] ?? "").trim();
+        const normalizedPhone = rawPhone.replace(/-/g, "");
         const isCaution = rawName.startsWith("*");
         const cleanName = isCaution ? rawName.slice(1).trim() : rawName;
 
@@ -84,7 +85,7 @@ export default function AdminPage() {
           return;
         }
 
-        if (!/^010\d{8}$/.test(rawPhone)) {
+        if (!/^010\d{8}$/.test(normalizedPhone)) {
           errors.push({
             row: excelRow,
             name: rawName,
@@ -94,7 +95,7 @@ export default function AdminPage() {
           return;
         }
 
-        if (phonesInFile.has(rawPhone)) {
+        if (phonesInFile.has(normalizedPhone)) {
           errors.push({
             row: excelRow,
             name: rawName,
@@ -104,10 +105,10 @@ export default function AdminPage() {
           return;
         }
 
-        phonesInFile.add(rawPhone);
-        customersByPhone.set(rawPhone, {
+        phonesInFile.add(normalizedPhone);
+        customersByPhone.set(normalizedPhone, {
           name: cleanName,
-          phone: rawPhone,
+          phone: normalizedPhone,
           isCaution,
         });
         registered += 1;
