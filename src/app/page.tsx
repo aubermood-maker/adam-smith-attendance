@@ -2,8 +2,13 @@
 
 import { FormEvent, useEffect, useRef, useState } from "react";
 
-type Step = "lookup" | "welcome" | "register" | "complete";
+type Step = "lookup" | "welcome" | "register" | "complete" | "records";
 type Customer = { name: string; phone: string };
+type AttendanceRecord = Customer & {
+  id: string;
+  checkedAt: string;
+  dateKey: string;
+};
 
 const DEMO_CUSTOMERS: Customer[] = [
   { name: "김민준", phone: "01012341234" },
@@ -30,6 +35,7 @@ export default function Home() {
   const [consent, setConsent] = useState(false);
   const [error, setError] = useState("");
   const [time, setTime] = useState("");
+  const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -64,11 +70,25 @@ export default function Home() {
 
   function completeAttendance(person: Customer) {
     const now = new Date();
-    const today = now.toISOString().slice(0, 10);
-    const key = `adam-attendance-${today}`;
-    const records = JSON.parse(localStorage.getItem(key) || "[]") as string[];
-    if (!records.includes(person.phone)) {
-      localStorage.setItem(key, JSON.stringify([...records, person.phone]));
+    const dateKey = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, "0"),
+      String(now.getDate()).padStart(2, "0"),
+    ].join("-");
+    const savedRecords = JSON.parse(
+      localStorage.getItem("adam-attendance-records") || "[]",
+    ) as AttendanceRecord[];
+    if (!savedRecords.some((item) => item.phone === person.phone && item.dateKey === dateKey)) {
+      const record: AttendanceRecord = {
+        ...person,
+        id: `${now.getTime()}-${person.phone}`,
+        checkedAt: now.toISOString(),
+        dateKey,
+      };
+      localStorage.setItem(
+        "adam-attendance-records",
+        JSON.stringify([record, ...savedRecords]),
+      );
     }
     setCustomer(person);
     setTime(
@@ -78,6 +98,22 @@ export default function Home() {
       }).format(now),
     );
     setStep("complete");
+  }
+
+  function openRecords() {
+    const savedRecords = JSON.parse(
+      localStorage.getItem("adam-attendance-records") || "[]",
+    ) as AttendanceRecord[];
+    setRecords(
+      savedRecords.sort(
+        (a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime(),
+      ),
+    );
+    setStep("records");
+  }
+
+  function maskPhone(value: string) {
+    return `${value.slice(0, 3)}-${value.slice(3, 7)}-${value.slice(7)}`;
   }
 
   function handleRegister(event: FormEvent) {
@@ -153,6 +189,11 @@ export default function Home() {
                 고객 조회하기 <span aria-hidden="true">→</span>
               </button>
             </form>
+            <button className="recordsButton" type="button" onClick={openRecords}>
+              <span className="recordsIcon" aria-hidden="true">☷</span>
+              <span><strong>출석 기록 보기</strong><small>저장된 참석자 목록을 확인해요</small></span>
+              <span className="recordsArrow" aria-hidden="true">›</span>
+            </button>
             <div className="help"><span>i</span> 처음 방문하셨나요? 번호 조회 후 바로 등록할 수 있어요.</div>
             <p className="demo">화면 체험용 등록 번호 · 1234</p>
           </>
@@ -220,6 +261,58 @@ export default function Home() {
             </div>
             <button className="primary" onClick={reset}>처음 화면으로</button>
             <p className="autoGuide">다음 고객을 위해 처음 화면으로 돌아가주세요.</p>
+          </div>
+        )}
+
+        {step === "records" && (
+          <div className="recordsView">
+            <button className="back backLeft" onClick={reset} aria-label="처음 화면으로">←</button>
+            <div className="eyebrow"><span /> ATTENDANCE LOG</div>
+            <div className="recordsHeading">
+              <div>
+                <h1>출석 기록</h1>
+                <p>이 기기에 저장된 참석자 목록입니다.</p>
+              </div>
+              <strong>{records.length}<small>명</small></strong>
+            </div>
+
+            {records.length === 0 ? (
+              <div className="emptyRecords">
+                <span aria-hidden="true">☷</span>
+                <strong>아직 출석 기록이 없어요.</strong>
+                <p>고객이 참석하면 이곳에 바로 표시됩니다.</p>
+              </div>
+            ) : (
+              <ul className="recordsList">
+                {records.map((record, index) => {
+                  const checkedAt = new Date(record.checkedAt);
+                  return (
+                    <li key={record.id}>
+                      <span className="recordNumber">{String(index + 1).padStart(2, "0")}</span>
+                      <div className="recordPerson">
+                        <strong>{record.name}</strong>
+                        <span>{maskPhone(record.phone)}</span>
+                      </div>
+                      <div className="recordTime">
+                        <strong>
+                          {new Intl.DateTimeFormat("ko-KR", {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          }).format(checkedAt)}
+                        </strong>
+                        <span>
+                          {new Intl.DateTimeFormat("ko-KR", {
+                            month: "short",
+                            day: "numeric",
+                          }).format(checkedAt)}
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <button className="primary recordsHome" onClick={reset}>출석 화면으로 돌아가기</button>
           </div>
         )}
       </section>
