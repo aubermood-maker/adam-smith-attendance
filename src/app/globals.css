@@ -454,6 +454,114 @@ footer {
 .adminPrimary { display: block; text-align: center; text-decoration: none; }
 .adminFooterActions p { margin: 10px 0 0; color: #999d99; font-size: 9px; text-align: center; }
 
+.eventPill {
+  width: fit-content;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: -20px 0 22px;
+  padding: 7px 11px;
+  border: 1px solid #d6d0c5;
+  border-radius: 999px;
+  background: #f8f4eb;
+  color: var(--navy);
+  font-size: 10px;
+  font-weight: 700;
+}
+.centeredEventPill { margin: -12px auto 24px; }
+.adminWideCard { width: min(100%, 940px); }
+.adminSection {
+  margin-top: 24px;
+  padding: 22px;
+  border: 1px solid #d9d4ca;
+  background: rgba(250, 247, 240, .6);
+}
+.sectionTitle { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.sectionTitle > span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--navy);
+  color: #fff;
+  font: 700 10px/1 "Playfair Display", serif;
+}
+.sectionTitle > div { display: flex; flex-direction: column; gap: 3px; }
+.sectionTitle strong { color: var(--navy); font-size: 14px; }
+.sectionTitle small { color: #8b9391; font-size: 9px; }
+.eventControls { display: grid; grid-template-columns: 1fr auto; gap: 10px; }
+.eventControls select, .newEventForm input, .manualForm input, .rosterTable input {
+  min-width: 0;
+  height: 43px;
+  padding: 0 12px;
+  border: 1px solid #c8c3b8;
+  background: #fff;
+  color: var(--navy);
+  outline: 0;
+}
+.eventControls select:focus, .newEventForm input:focus, .manualForm input:focus, .rosterTable input:focus { border-color: var(--gold); }
+.secondaryButton, .newEventForm button, .manualForm button {
+  min-height: 43px;
+  padding: 0 18px;
+  border: 0;
+  background: var(--navy);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.secondaryButton:disabled { background: #7a878e; cursor: default; }
+.newEventForm { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin-top: 10px; }
+.adminMessage { margin: 11px 0 0; color: #7c6650; font-size: 10px; }
+.adminTwoColumns { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.compactSection { min-width: 0; }
+.manualForm { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; }
+.manualForm label {
+  grid-column: 1 / 3;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #657178;
+  font-size: 10px;
+}
+.manualForm label input { width: 16px; height: 16px; min-height: 0; padding: 0; accent-color: var(--navy); }
+.manualForm button { grid-column: 3; grid-row: 1 / 3; }
+.compactUpload { min-height: 102px; display: grid; grid-template-columns: 42px 1fr; grid-template-rows: auto auto; text-align: left; padding: 16px; }
+.compactUpload .uploadIcon { grid-row: 1 / 3; margin: 0; }
+.compactUpload strong, .compactUpload small { justify-self: start; }
+.rosterSection { padding: 0; overflow: hidden; }
+.rosterHeader { padding: 22px 22px 0; }
+.rosterTableWrap { width: 100%; overflow-x: auto; }
+.rosterTable { width: 100%; border-collapse: collapse; font-size: 11px; }
+.rosterTable th {
+  padding: 11px 14px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 9px;
+  text-align: left;
+}
+.rosterTable td { padding: 13px 14px; border-bottom: 1px solid #ddd8cf; color: #68747a; }
+.rosterTable td strong { color: var(--navy); }
+.rosterTable input { width: 100%; height: 34px; }
+.rosterTable th:nth-child(1) { width: 28%; }
+.rosterTable th:nth-child(2) { width: 30%; }
+.rosterTable th:nth-child(3) { width: 16%; }
+.rowActions { white-space: nowrap; }
+.rowActions button {
+  padding: 6px 9px;
+  border: 1px solid #aab1b2;
+  background: #fff;
+  color: var(--navy);
+  font-size: 9px;
+}
+.rowActions button + button { margin-left: 5px; }
+.rowActions .dangerAction { border-color: #d6b4b0; color: #a33a33; }
+.rowActions .mutedAction { color: #7f888b; }
+.tableCheck { display: flex; align-items: center; gap: 4px; font-size: 9px; }
+.tableCheck input { width: 14px; height: 14px; min-height: 0; padding: 0; }
+.normalLabel { color: #8c9491; font-size: 9px; }
+.emptyCell { height: 100px; color: #969b98 !important; text-align: center; }
+
 @media (max-width: 600px) {
   .shell { padding: 18px 14px; }
   .brand { margin-bottom: 12px; transform: scale(.92); }
@@ -465,6 +573,11 @@ footer {
   .adminCard { padding: 54px 26px 38px; }
   .formatGuide { grid-template-columns: 1fr; }
   .formatGuide > div + div { border-left: 0; border-top: 1px solid #d9d4ca; }
+  .adminTwoColumns { grid-template-columns: 1fr; gap: 0; }
+  .eventControls, .newEventForm { grid-template-columns: 1fr; }
+  .manualForm { grid-template-columns: 1fr; }
+  .manualForm label, .manualForm button { grid-column: 1; grid-row: auto; }
+  .rosterTable { min-width: 620px; }
 }
 
 @media (max-width: 370px) {

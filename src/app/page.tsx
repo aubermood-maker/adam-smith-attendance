@@ -1,19 +1,17 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
+import {
+  AttendanceRecord,
+  Customer,
+  EventItem,
+  createAttendanceRecord,
+  initializeAttendanceStorage,
+  saveAttendanceRecords,
+  saveCustomers,
+} from "@/lib/attendance-storage";
 
 type Step = "lookup" | "welcome" | "register" | "complete" | "records";
-type Customer = { name: string; phone: string; isCaution?: boolean };
-type AttendanceRecord = Customer & {
-  id: string;
-  checkedAt: string;
-  dateKey: string;
-};
-
-const DEMO_CUSTOMERS: Customer[] = [
-  { name: "김민준", phone: "01012341234" },
-  { name: "이지은", phone: "01098765678" },
-];
 
 function normalizePhone(value: string) {
   return value.replace(/\D/g, "").slice(0, 11);
@@ -32,7 +30,6 @@ function playCheckInSound(type: "dingdong" | "beep" | "warning") {
     const masterGain = audioContext.createGain();
     masterGain.connect(audioContext.destination);
     masterGain.gain.setValueAtTime(0.0001, audioContext.currentTime);
-
     const playNote = (
       frequency: number,
       startsAfter: number,
@@ -43,7 +40,6 @@ function playCheckInSound(type: "dingdong" | "beep" | "warning") {
       const noteGain = audioContext.createGain();
       const startsAt = audioContext.currentTime + startsAfter;
       const endsAt = startsAt + duration;
-
       oscillator.type = oscillatorType;
       oscillator.frequency.setValueAtTime(frequency, startsAt);
       noteGain.gain.setValueAtTime(0.0001, startsAt);
@@ -54,7 +50,6 @@ function playCheckInSound(type: "dingdong" | "beep" | "warning") {
       oscillator.start(startsAt);
       oscillator.stop(endsAt);
     };
-
     masterGain.gain.exponentialRampToValueAtTime(1, audioContext.currentTime + 0.01);
     if (type === "dingdong") {
       playNote(659.25, 0, 0.28);
@@ -70,12 +65,15 @@ function playCheckInSound(type: "dingdong" | "beep" | "warning") {
       window.setTimeout(() => void audioContext.close(), 400);
     }
   } catch {
-    // Audio is a progressive enhancement; check-in still works if unavailable.
+    // 출석 기능은 오디오 지원 여부와 관계없이 계속 동작합니다.
   }
 }
 
 export default function Home() {
   const [step, setStep] = useState<Step>("lookup");
+  const [event, setEvent] = useState<EventItem | null>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [allRecords, setAllRecords] = useState<AttendanceRecord[]>([]);
   const [digits, setDigits] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [name, setName] = useState("");
@@ -87,26 +85,32 @@ export default function Home() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const data = initializeAttendanceStorage();
+    setEvent(data.events.find((item) => item.id === data.activeEventId) || null);
+    setCustomers(data.customers);
+    setAllRecords(data.records);
+  }, []);
+
+  useEffect(() => {
     inputRef.current?.focus();
   }, [step]);
 
-  function getCustomers() {
-    if (typeof window === "undefined") return DEMO_CUSTOMERS;
-    const saved = JSON.parse(localStorage.getItem("adam-customers") || "[]") as Customer[];
-    const customersByPhone = new Map<string, Customer>();
-    DEMO_CUSTOMERS.forEach((item) => customersByPhone.set(item.phone, item));
-    saved.forEach((item) => customersByPhone.set(item.phone, item));
-    return [...customersByPhone.values()];
+  function eventCustomers() {
+    return customers.filter((item) => item.eventId === event?.id);
   }
 
-  function handleLookup(event: FormEvent) {
-    event.preventDefault();
+  function handleLookup(formEvent: FormEvent) {
+    formEvent.preventDefault();
     setError("");
+    if (!event) {
+      setError("현재 진행 중인 행사가 없습니다. 관리자에게 문의해주세요.");
+      return;
+    }
     if (digits.length !== 4) {
       setError("휴대폰 번호 뒤 4자리를 입력해주세요.");
       return;
     }
-    const found = getCustomers().filter((item) => item.phone.endsWith(digits));
+    const found = eventCustomers().filter((item) => item.phone.endsWith(digits));
     if (found.length === 1) {
       setCustomer(found[0]);
       setStep("welcome");
@@ -121,58 +125,29 @@ export default function Home() {
   }
 
   function completeAttendance(person: Customer, playSuccessSound = false) {
-    if (playSuccessSound) {
-      playCheckInSound(person.isCaution ? "warning" : "dingdong");
-    }
+    if (!event) return;
+    if (playSuccessSound) playCheckInSound(person.isCaution ? "warning" : "dingdong");
     const now = new Date();
-    const dateKey = [
-      now.getFullYear(),
-      String(now.getMonth() + 1).padStart(2, "0"),
-      String(now.getDate()).padStart(2, "0"),
-    ].join("-");
-    const savedRecords = JSON.parse(
-      localStorage.getItem("adam-attendance-records") || "[]",
-    ) as AttendanceRecord[];
-    if (!savedRecords.some((item) => item.phone === person.phone && item.dateKey === dateKey)) {
-      const record: AttendanceRecord = {
-        ...person,
-        id: `${now.getTime()}-${person.phone}`,
-        checkedAt: now.toISOString(),
-        dateKey,
-      };
-      localStorage.setItem(
-        "adam-attendance-records",
-        JSON.stringify([record, ...savedRecords]),
-      );
+    const newRecord = createAttendanceRecord(person, event.name, now);
+    const alreadyChecked = allRecords.some(
+      (item) =>
+        item.eventId === event.id &&
+        item.phone === person.phone &&
+        item.dateKey === newRecord.dateKey,
+    );
+    const nextRecords = alreadyChecked ? allRecords : [newRecord, ...allRecords];
+    if (!alreadyChecked) {
+      setAllRecords(nextRecords);
+      saveAttendanceRecords(nextRecords);
     }
     setCustomer(person);
-    setTime(
-      new Intl.DateTimeFormat("ko-KR", {
-        hour: "numeric",
-        minute: "2-digit",
-      }).format(now),
-    );
+    setTime(new Intl.DateTimeFormat("ko-KR", { hour: "numeric", minute: "2-digit" }).format(now));
     setStep("complete");
   }
 
-  function openRecords() {
-    const savedRecords = JSON.parse(
-      localStorage.getItem("adam-attendance-records") || "[]",
-    ) as AttendanceRecord[];
-    setRecords(
-      savedRecords.sort(
-        (a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime(),
-      ),
-    );
-    setStep("records");
-  }
-
-  function maskPhone(value: string) {
-    return `${value.slice(0, 3)}-${value.slice(3, 7)}-${value.slice(7)}`;
-  }
-
-  function handleRegister(event: FormEvent) {
-    event.preventDefault();
+  function handleRegister(formEvent: FormEvent) {
+    formEvent.preventDefault();
+    if (!event) return;
     setError("");
     const normalized = normalizePhone(phone);
     if (name.trim().length < 2) {
@@ -187,18 +162,36 @@ export default function Home() {
       setError("개인정보 수집 및 이용에 동의해주세요.");
       return;
     }
-    const exists = getCustomers().some((item) => item.phone === normalized);
-    if (exists) {
-      setError("이미 등록된 번호입니다. 처음 화면에서 다시 조회해주세요.");
+    if (eventCustomers().some((item) => item.phone === normalized)) {
+      setError("현재 행사에 이미 등록된 번호입니다. 처음 화면에서 다시 조회해주세요.");
       return;
     }
-    const newCustomer = { name: name.trim(), phone: normalized };
-    const saved = JSON.parse(localStorage.getItem("adam-customers") || "[]") as Customer[];
-    localStorage.setItem("adam-customers", JSON.stringify([...saved, newCustomer]));
+    const newCustomer: Customer = {
+      eventId: event.id,
+      name: name.trim(),
+      phone: normalized,
+    };
+    const nextCustomers = [...customers, newCustomer];
+    setCustomers(nextCustomers);
+    saveCustomers(nextCustomers);
     completeAttendance(newCustomer);
   }
 
+  function openRecords() {
+    if (!event) return;
+    setRecords(
+      allRecords
+        .filter((item) => item.eventId === event.id)
+        .sort((a, b) => new Date(b.checkedAt).getTime() - new Date(a.checkedAt).getTime()),
+    );
+    setStep("records");
+  }
+
   function reset() {
+    const data = initializeAttendanceStorage();
+    setEvent(data.events.find((item) => item.id === data.activeEventId) || null);
+    setCustomers(data.customers);
+    setAllRecords(data.records);
     setStep("lookup");
     setDigits("");
     setCustomer(null);
@@ -212,136 +205,86 @@ export default function Home() {
     <main className="shell">
       <div className="brand">
         <div className="mark" aria-hidden="true">A</div>
-        <span>ADAM SMITH</span>
-        <span className="brandDivider" />
-        <span className="brandKo">애덤스미스 출석</span>
+        <span>ADAM SMITH</span><span className="brandDivider" /><span className="brandKo">애덤스미스 출석</span>
       </div>
 
       <section className="card" aria-live="polite">
         {step === "lookup" && (
           <>
+            <div className="eventPill"><span className="statusDot" /> {event?.name || "진행 행사 없음"}</div>
             <div className="eyebrow"><span /> CHECK-IN</div>
             <h1>반갑습니다.<br />출석을 시작할게요.</h1>
-            <p className="description">등록된 휴대폰 번호의<br className="mobileBreak" /> 뒤 4자리를 입력해주세요.</p>
+            <p className="description">현재 행사 명단에 등록된<br />휴대폰 번호의 뒤 4자리를 입력해주세요.</p>
             <form onSubmit={handleLookup}>
               <label className="fieldLabel" htmlFor="digits">휴대폰 번호 뒤 4자리</label>
               <div className="digitField">
                 <span>••• ••••</span>
-                <input
-                  ref={inputRef}
-                  id="digits"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  maxLength={4}
-                  value={digits}
-                  onChange={(e) => setDigits(e.target.value.replace(/\D/g, ""))}
-                  placeholder="0000"
-                  aria-describedby={error ? "form-error" : undefined}
-                />
+                <input ref={inputRef} id="digits" inputMode="numeric" pattern="[0-9]*" maxLength={4} value={digits} onChange={(e) => setDigits(e.target.value.replace(/\D/g, ""))} placeholder="0000" />
               </div>
-              {error && <p className="error" id="form-error">{error}</p>}
-              <button className="primary" type="submit" disabled={digits.length !== 4}>
-                고객 조회하기 <span aria-hidden="true">→</span>
-              </button>
+              {error && <p className="error">{error}</p>}
+              <button className="primary" type="submit" disabled={digits.length !== 4 || !event}>고객 조회하기 <span>→</span></button>
             </form>
-            <button className="recordsButton" type="button" onClick={openRecords}>
-              <span className="recordsIcon" aria-hidden="true">☷</span>
-              <span><strong>출석 기록 보기</strong><small>저장된 참석자 목록을 확인해요</small></span>
-              <span className="recordsArrow" aria-hidden="true">›</span>
+            <button className="recordsButton" type="button" onClick={openRecords} disabled={!event}>
+              <span className="recordsIcon">☷</span>
+              <span><strong>현재 행사 출석 기록</strong><small>{event?.name || "행사를 먼저 지정해주세요"}</small></span>
+              <span className="recordsArrow">›</span>
             </button>
-            <a className="adminLink" href="/admin">관리자 고객 명단 등록</a>
-            <div className="help"><span>i</span> 처음 방문하셨나요? 번호 조회 후 바로 등록할 수 있어요.</div>
-            <p className="demo">화면 체험용 등록 번호 · 1234</p>
+            <a className="adminLink" href="/admin">관리자 행사·고객 명단 관리</a>
+            <div className="help"><span>i</span> 처음 방문하셨나요? 번호 조회 후 현재 행사에 바로 등록할 수 있어요.</div>
           </>
         )}
 
         {step === "welcome" && customer && (
           <div className="centered">
-            <div className="personIcon" aria-hidden="true">✓</div>
+            <div className="eventPill centeredEventPill">{event?.name}</div>
+            <div className="personIcon">✓</div>
             <div className="eyebrow centeredEyebrow"><span /> MEMBER FOUND <span /></div>
-            <h1>
-              {customer.name} 님,
-              {customer.isCaution && <span className="cautionBadge welcomeBadge">주의 대상</span>}
-              <br />어서 오세요.
-            </h1>
-            <p className="description">아래 버튼을 누르면<br />오늘의 출석이 기록됩니다.</p>
-            <button className="primary" onClick={() => completeAttendance(customer, true)}>
-              참석하기 <span aria-hidden="true">→</span>
-            </button>
+            <h1>{customer.name} 님,{customer.isCaution && <span className="cautionBadge welcomeBadge">주의 대상</span>}<br />어서 오세요.</h1>
+            <p className="description">아래 버튼을 누르면<br />현재 행사 출석이 기록됩니다.</p>
+            <button className="primary" onClick={() => completeAttendance(customer, true)}>참석하기 <span>→</span></button>
             <button className="textButton" onClick={reset}>다른 번호로 조회</button>
           </div>
         )}
 
         {step === "register" && (
           <>
-            <button className="back" onClick={reset} aria-label="이전 화면">←</button>
+            <button className="back" onClick={reset}>←</button>
+            <div className="eventPill">{event?.name}</div>
             <div className="eyebrow"><span /> FIRST VISIT</div>
             <h1>처음 오셨군요.<br />정보를 등록해주세요.</h1>
-            <p className="description">등록과 동시에 오늘 출석이 완료됩니다.</p>
+            <p className="description">현재 행사 등록과 동시에 출석이 완료됩니다.</p>
             <form className="registerForm" onSubmit={handleRegister}>
               <label className="fieldLabel" htmlFor="name">성함</label>
-              <input
-                ref={inputRef}
-                className="lineInput"
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="홍길동"
-                autoComplete="name"
-              />
+              <input ref={inputRef} className="lineInput" id="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="홍길동" />
               <label className="fieldLabel" htmlFor="phone">휴대폰 번호</label>
-              <input
-                className="lineInput"
-                id="phone"
-                inputMode="numeric"
-                value={formatPhone(phone)}
-                onChange={(e) => setPhone(normalizePhone(e.target.value))}
-                placeholder="010-0000-0000"
-                autoComplete="tel"
-              />
-              <label className="check">
-                <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-                <span>개인정보 수집 및 이용에 동의합니다.</span>
-              </label>
+              <input className="lineInput" id="phone" inputMode="numeric" value={formatPhone(phone)} onChange={(e) => setPhone(normalizePhone(e.target.value))} placeholder="010-0000-0000" />
+              <label className="check"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /><span>개인정보 수집 및 이용에 동의합니다.</span></label>
               {error && <p className="error">{error}</p>}
-              <button className="primary" type="submit">등록하고 참석하기 <span aria-hidden="true">→</span></button>
+              <button className="primary" type="submit">등록하고 참석하기 <span>→</span></button>
             </form>
           </>
         )}
 
         {step === "complete" && customer && (
           <div className="centered complete">
+            <div className="eventPill centeredEventPill">{event?.name}</div>
             <div className="successRing"><span>✓</span></div>
             <div className="eyebrow centeredEyebrow"><span /> CHECK-IN COMPLETE <span /></div>
             <h1>출석이<br />완료되었습니다.</h1>
             <p className="description"><strong>{customer.name}</strong> 님, 오늘도 좋은 시간 보내세요.</p>
-            <div className="receipt">
-              <span>오늘의 출석 시간</span>
-              <strong>{time}</strong>
-            </div>
+            <div className="receipt"><span>출석 시간</span><strong>{time}</strong></div>
             <button className="primary" onClick={reset}>처음 화면으로</button>
-            <p className="autoGuide">다음 고객을 위해 처음 화면으로 돌아가주세요.</p>
           </div>
         )}
 
         {step === "records" && (
           <div className="recordsView">
-            <button className="back backLeft" onClick={reset} aria-label="처음 화면으로">←</button>
-            <div className="eyebrow"><span /> ATTENDANCE LOG</div>
-            <div className="recordsHeading">
-              <div>
-                <h1>출석 기록</h1>
-                <p>이 기기에 저장된 참석자 목록입니다.</p>
-              </div>
-              <strong>{records.length}<small>명</small></strong>
-            </div>
-
+            <button className="back" onClick={reset}>←</button>
+            <div className="eventPill">{event?.name}</div>
+            <div className="eyebrow"><span /> EVENT ATTENDANCE</div>
+            <div className="recordsHeading"><div><h1>출석 기록</h1><p>현재 행사에 저장된 참석자입니다.</p></div><strong>{records.length}<small>명</small></strong></div>
             {records.length === 0 ? (
-              <div className="emptyRecords">
-                <span aria-hidden="true">☷</span>
-                <strong>아직 출석 기록이 없어요.</strong>
-                <p>고객이 참석하면 이곳에 바로 표시됩니다.</p>
-              </div>
+              <div className="emptyRecords"><span>☷</span><strong>아직 출석 기록이 없어요.</strong><p>현재 행사 참석자가 이곳에 표시됩니다.</p></div>
             ) : (
               <ul className="recordsList">
                 {records.map((record, index) => {
@@ -349,29 +292,8 @@ export default function Home() {
                   return (
                     <li key={record.id}>
                       <span className="recordNumber">{String(index + 1).padStart(2, "0")}</span>
-                      <div className="recordPerson">
-                        <strong>
-                          {record.name}
-                          {record.isCaution && (
-                            <span className="cautionBadge" title="주의 대상">주의</span>
-                          )}
-                        </strong>
-                        <span>{maskPhone(record.phone)}</span>
-                      </div>
-                      <div className="recordTime">
-                        <strong>
-                          {new Intl.DateTimeFormat("ko-KR", {
-                            hour: "numeric",
-                            minute: "2-digit",
-                          }).format(checkedAt)}
-                        </strong>
-                        <span>
-                          {new Intl.DateTimeFormat("ko-KR", {
-                            month: "short",
-                            day: "numeric",
-                          }).format(checkedAt)}
-                        </span>
-                      </div>
+                      <div className="recordPerson"><strong>{record.name}{record.isCaution && <span className="cautionBadge">주의</span>}</strong><span>{formatPhone(record.phone)}</span></div>
+                      <div className="recordTime"><strong>{new Intl.DateTimeFormat("ko-KR", { hour: "numeric", minute: "2-digit" }).format(checkedAt)}</strong><span>{new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric" }).format(checkedAt)}</span></div>
                     </li>
                   );
                 })}
@@ -381,10 +303,7 @@ export default function Home() {
           </div>
         )}
       </section>
-
-      <footer>
-        <span className="statusDot" /> 안전하게 출석 정보를 기록하고 있어요
-      </footer>
+      <footer><span className="statusDot" /> 행사별로 안전하게 출석 정보를 기록하고 있어요</footer>
     </main>
   );
 }
