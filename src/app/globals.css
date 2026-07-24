@@ -233,6 +233,16 @@ h1 {
   vertical-align: middle;
 }
 .welcomeBadge { position: relative; top: -5px; }
+.newBadge {
+  display: inline-flex;
+  margin-left: 5px;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background: #dce9df;
+  color: #4d7057;
+  font: 700 9px/1 "Noto Sans KR", sans-serif;
+  vertical-align: middle;
+}
 
 .centered { padding-top: 26px; text-align: center; }
 .personIcon {

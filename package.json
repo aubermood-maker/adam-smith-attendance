@@ -13,6 +13,7 @@
     "deploy:vinext": "vinext-cloudflare deploy --config dist/server/wrangler.json"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.8",
     "@vinext/cloudflare": "^1.0.0-beta.3",
     "next": "^16.2.11",
     "react": "^19.2.8",
