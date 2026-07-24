@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 
 type Step = "lookup" | "welcome" | "register" | "complete" | "records";
-type Customer = { name: string; phone: string };
+type Customer = { name: string; phone: string; isCaution?: boolean };
 type AttendanceRecord = Customer & {
   id: string;
   checkedAt: string;
@@ -26,7 +26,7 @@ function formatPhone(value: string) {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 }
 
-function playCheckInSound(type: "dingdong" | "beep") {
+function playCheckInSound(type: "dingdong" | "beep" | "warning") {
   try {
     const audioContext = new AudioContext();
     const masterGain = audioContext.createGain();
@@ -60,6 +60,11 @@ function playCheckInSound(type: "dingdong" | "beep") {
       playNote(659.25, 0, 0.28);
       playNote(523.25, 0.22, 0.42);
       window.setTimeout(() => void audioContext.close(), 800);
+    } else if (type === "warning") {
+      playNote(440, 0, 0.14, "triangle");
+      playNote(330, 0.16, 0.14, "triangle");
+      playNote(440, 0.32, 0.24, "triangle");
+      window.setTimeout(() => void audioContext.close(), 700);
     } else {
       playNote(220, 0, 0.22, "square");
       window.setTimeout(() => void audioContext.close(), 400);
@@ -88,7 +93,10 @@ export default function Home() {
   function getCustomers() {
     if (typeof window === "undefined") return DEMO_CUSTOMERS;
     const saved = JSON.parse(localStorage.getItem("adam-customers") || "[]") as Customer[];
-    return [...DEMO_CUSTOMERS, ...saved];
+    const customersByPhone = new Map<string, Customer>();
+    DEMO_CUSTOMERS.forEach((item) => customersByPhone.set(item.phone, item));
+    saved.forEach((item) => customersByPhone.set(item.phone, item));
+    return [...customersByPhone.values()];
   }
 
   function handleLookup(event: FormEvent) {
@@ -114,7 +122,7 @@ export default function Home() {
 
   function completeAttendance(person: Customer, playSuccessSound = false) {
     if (playSuccessSound) {
-      playCheckInSound("dingdong");
+      playCheckInSound(person.isCaution ? "warning" : "dingdong");
     }
     const now = new Date();
     const dateKey = [
@@ -241,6 +249,7 @@ export default function Home() {
               <span><strong>출석 기록 보기</strong><small>저장된 참석자 목록을 확인해요</small></span>
               <span className="recordsArrow" aria-hidden="true">›</span>
             </button>
+            <a className="adminLink" href="/admin">관리자 고객 명단 등록</a>
             <div className="help"><span>i</span> 처음 방문하셨나요? 번호 조회 후 바로 등록할 수 있어요.</div>
             <p className="demo">화면 체험용 등록 번호 · 1234</p>
           </>
@@ -250,7 +259,11 @@ export default function Home() {
           <div className="centered">
             <div className="personIcon" aria-hidden="true">✓</div>
             <div className="eyebrow centeredEyebrow"><span /> MEMBER FOUND <span /></div>
-            <h1>{customer.name} 님,<br />어서 오세요.</h1>
+            <h1>
+              {customer.name} 님,
+              {customer.isCaution && <span className="cautionBadge welcomeBadge">주의 대상</span>}
+              <br />어서 오세요.
+            </h1>
             <p className="description">아래 버튼을 누르면<br />오늘의 출석이 기록됩니다.</p>
             <button className="primary" onClick={() => completeAttendance(customer, true)}>
               참석하기 <span aria-hidden="true">→</span>
@@ -337,7 +350,12 @@ export default function Home() {
                     <li key={record.id}>
                       <span className="recordNumber">{String(index + 1).padStart(2, "0")}</span>
                       <div className="recordPerson">
-                        <strong>{record.name}</strong>
+                        <strong>
+                          {record.name}
+                          {record.isCaution && (
+                            <span className="cautionBadge" title="주의 대상">주의</span>
+                          )}
+                        </strong>
                         <span>{maskPhone(record.phone)}</span>
                       </div>
                       <div className="recordTime">
