@@ -26,6 +26,49 @@ function formatPhone(value: string) {
   return `${digits.slice(0, 3)}-${digits.slice(3, 7)}-${digits.slice(7)}`;
 }
 
+function playCheckInSound(type: "dingdong" | "beep") {
+  try {
+    const audioContext = new AudioContext();
+    const masterGain = audioContext.createGain();
+    masterGain.connect(audioContext.destination);
+    masterGain.gain.setValueAtTime(0.0001, audioContext.currentTime);
+
+    const playNote = (
+      frequency: number,
+      startsAfter: number,
+      duration: number,
+      oscillatorType: OscillatorType = "sine",
+    ) => {
+      const oscillator = audioContext.createOscillator();
+      const noteGain = audioContext.createGain();
+      const startsAt = audioContext.currentTime + startsAfter;
+      const endsAt = startsAt + duration;
+
+      oscillator.type = oscillatorType;
+      oscillator.frequency.setValueAtTime(frequency, startsAt);
+      noteGain.gain.setValueAtTime(0.0001, startsAt);
+      noteGain.gain.exponentialRampToValueAtTime(0.24, startsAt + 0.02);
+      noteGain.gain.exponentialRampToValueAtTime(0.0001, endsAt);
+      oscillator.connect(noteGain);
+      noteGain.connect(masterGain);
+      oscillator.start(startsAt);
+      oscillator.stop(endsAt);
+    };
+
+    masterGain.gain.exponentialRampToValueAtTime(1, audioContext.currentTime + 0.01);
+    if (type === "dingdong") {
+      playNote(659.25, 0, 0.28);
+      playNote(523.25, 0.22, 0.42);
+      window.setTimeout(() => void audioContext.close(), 800);
+    } else {
+      playNote(220, 0, 0.22, "square");
+      window.setTimeout(() => void audioContext.close(), 400);
+    }
+  } catch {
+    // Audio is a progressive enhancement; check-in still works if unavailable.
+  }
+}
+
 export default function Home() {
   const [step, setStep] = useState<Step>("lookup");
   const [digits, setDigits] = useState("");
@@ -65,10 +108,14 @@ export default function Home() {
       setError("같은 번호를 사용하는 고객이 있어요. 안내 데스크에 문의해주세요.");
       return;
     }
+    playCheckInSound("beep");
     setStep("register");
   }
 
-  function completeAttendance(person: Customer) {
+  function completeAttendance(person: Customer, playSuccessSound = false) {
+    if (playSuccessSound) {
+      playCheckInSound("dingdong");
+    }
     const now = new Date();
     const dateKey = [
       now.getFullYear(),
@@ -205,7 +252,7 @@ export default function Home() {
             <div className="eyebrow centeredEyebrow"><span /> MEMBER FOUND <span /></div>
             <h1>{customer.name} 님,<br />어서 오세요.</h1>
             <p className="description">아래 버튼을 누르면<br />오늘의 출석이 기록됩니다.</p>
-            <button className="primary" onClick={() => completeAttendance(customer)}>
+            <button className="primary" onClick={() => completeAttendance(customer, true)}>
               참석하기 <span aria-hidden="true">→</span>
             </button>
             <button className="textButton" onClick={reset}>다른 번호로 조회</button>
